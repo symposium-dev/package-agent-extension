@@ -1,0 +1,10 @@
+[book]
+title = "Symposium Agent Extension Guide"
+authors = ["Symposium Contributors"]
+language = "en"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/symposium-dev/package-agent-extension"
