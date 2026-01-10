@@ -74,30 +74,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            use_musl: true
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            use_musl: false
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-24.04-arm
-            use_musl: true
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
-            use_musl: false
+          # macOS and Windows always included
           - target: x86_64-apple-darwin
             os: macos-13
-            use_musl: false
           - target: aarch64-apple-darwin
             os: macos-14
-            use_musl: false
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            use_musl: false
+          # Linux targets selected by musl input
+          - target: ${{ inputs.musl && 'x86_64-unknown-linux-musl' || 'x86_64-unknown-linux-gnu' }}
+            os: ubuntu-latest
+          - target: ${{ inputs.musl && 'aarch64-unknown-linux-musl' || 'aarch64-unknown-linux-gnu' }}
+            os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # Only run Linux builds that match the musl input; macOS/Windows always run
-    if: ${{ !contains(matrix.target, 'unknown-linux') || matrix.use_musl == inputs.musl }}
     steps:
       - uses: actions/checkout@v4
 
@@ -114,7 +103,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Install musl tools
-        if: matrix.use_musl
+        if: inputs.musl && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build release binary
