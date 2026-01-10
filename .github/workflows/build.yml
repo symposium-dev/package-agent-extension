@@ -1,0 +1,219 @@
+# Reusable workflow for building and releasing Symposium agent extensions
+#
+# Builds cross-platform binaries and uploads them to a GitHub release.
+# Generates extension.json metadata for the ACP registry.
+#
+# Usage:
+#   jobs:
+#     release:
+#       permissions:
+#         contents: write
+#       uses: symposium-dev/package-agent-extension/.github/workflows/build.yml@v1
+#       with:
+#         musl: true
+#       secrets: inherit
+
+name: Build Agent Extension
+
+on:
+  workflow_call:
+    inputs:
+      manifest:
+        description: "Path to Cargo.toml (default: ./Cargo.toml)"
+        type: string
+        default: "./Cargo.toml"
+      musl:
+        description: "Use musl for Linux builds (static linking)"
+        type: boolean
+        required: true
+      extra_args:
+        description: 'Additional args to append (JSON array, e.g. ["--flag"])'
+        type: string
+        default: "[]"
+      extra_env:
+        description: 'Additional env vars to merge (JSON object, e.g. {"KEY": "value"})'
+        type: string
+        default: "{}"
+
+jobs:
+  metadata:
+    name: Extract Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.meta.outputs.name }}
+      version: ${{ steps.meta.outputs.version }}
+      binary: ${{ steps.meta.outputs.binary }}
+      description: ${{ steps.meta.outputs.description }}
+      args: ${{ steps.meta.outputs.args }}
+      env: ${{ steps.meta.outputs.env }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract package metadata
+        id: meta
+        shell: bash
+        run: |
+          METADATA=$(cargo metadata --format-version=1 --no-deps --manifest-path ${{ inputs.manifest }})
+
+          # Core package info
+          echo "name=$(echo "$METADATA" | jq -r '.packages[0].name')" >> $GITHUB_OUTPUT
+          echo "version=$(echo "$METADATA" | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
+          echo "description=$(echo "$METADATA" | jq -r '.packages[0].description // ""')" >> $GITHUB_OUTPUT
+
+          # Symposium-specific metadata (falls back to package name for binary)
+          echo "binary=$(echo "$METADATA" | jq -r '.packages[0].metadata.symposium.binary // .packages[0].name')" >> $GITHUB_OUTPUT
+
+          # Args and env as JSON (empty array/object if not specified)
+          echo "args=$(echo "$METADATA" | jq -c '.packages[0].metadata.symposium.args // []')" >> $GITHUB_OUTPUT
+          echo "env=$(echo "$METADATA" | jq -c '.packages[0].metadata.symposium.env // {}')" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use_musl: true
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_musl: false
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            use_musl: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            use_musl: false
+          - target: x86_64-apple-darwin
+            os: macos-13
+            use_musl: false
+          - target: aarch64-apple-darwin
+            os: macos-14
+            use_musl: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use_musl: false
+    runs-on: ${{ matrix.os }}
+    # Only run Linux builds that match the musl input; macOS/Windows always run
+    if: ${{ !contains(matrix.target, 'unknown-linux') || matrix.use_musl == inputs.musl }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: matrix.use_musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --manifest-path ${{ inputs.manifest }}
+
+      - name: Determine archive name
+        id: archive
+        shell: bash
+        run: |
+          # Parse target triple: arch-vendor-os[-env]
+          TARGET="${{ matrix.target }}"
+          ARCH=$(echo "$TARGET" | cut -d'-' -f1)
+          OS=$(echo "$TARGET" | cut -d'-' -f3)
+
+          # Normalize OS names
+          case "$OS" in
+            apple) OS="macos" ;;
+            pc) OS="windows" ;;
+            unknown) OS="linux" ;;
+          esac
+
+          BINARY="${{ needs.metadata.outputs.binary }}"
+          VERSION="${{ needs.metadata.outputs.version }}"
+
+          if [[ "$OS" == "windows" ]]; then
+            echo "name=${BINARY}-${OS}-${ARCH}-v${VERSION}.zip" >> $GITHUB_OUTPUT
+            echo "ext=.exe" >> $GITHUB_OUTPUT
+          else
+            echo "name=${BINARY}-${OS}-${ARCH}-v${VERSION}.tar.gz" >> $GITHUB_OUTPUT
+            echo "ext=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          BINARY="${{ needs.metadata.outputs.binary }}"
+          TARGET="${{ matrix.target }}"
+          tar -czvf "${{ steps.archive.outputs.name }}" \
+            -C "target/${TARGET}/release" \
+            "${BINARY}"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = "${{ needs.metadata.outputs.binary }}.exe"
+          $target = "${{ matrix.target }}"
+          Compress-Archive -Path "target\${target}\release\${binary}" -DestinationPath "${{ steps.archive.outputs.name }}"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.archive.outputs.name }}
+
+  extension-json:
+    name: Generate extension.json
+    needs: [metadata, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate extension.json
+        shell: bash
+        env:
+          NAME: ${{ needs.metadata.outputs.name }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          BINARY: ${{ needs.metadata.outputs.binary }}
+          DESCRIPTION: ${{ needs.metadata.outputs.description }}
+          ARGS: ${{ needs.metadata.outputs.args }}
+          ENV_VARS: ${{ needs.metadata.outputs.env }}
+          EXTRA_ARGS: ${{ inputs.extra_args }}
+          EXTRA_ENV: ${{ inputs.extra_env }}
+        run: |
+          jq -n \
+            --arg name "$NAME" \
+            --arg version "$VERSION" \
+            --arg binary "$BINARY" \
+            --arg description "$DESCRIPTION" \
+            --argjson args "$ARGS" \
+            --argjson env "$ENV_VARS" \
+            --argjson extra_args "$EXTRA_ARGS" \
+            --argjson extra_env "$EXTRA_ENV" \
+            '{
+              name: $name,
+              version: $version,
+              description: $description,
+              binary: $binary,
+              args: ($args + $extra_args),
+              env: ($env * $extra_env),
+              platforms: {
+                "macos-arm64": "\($binary)-macos-aarch64-v\($version).tar.gz",
+                "macos-x64": "\($binary)-macos-x86_64-v\($version).tar.gz",
+                "linux-arm64": "\($binary)-linux-aarch64-v\($version).tar.gz",
+                "linux-x64": "\($binary)-linux-x86_64-v\($version).tar.gz",
+                "windows-x64": "\($binary)-windows-x86_64-v\($version).zip"
+              }
+            }' > extension.json
+          cat extension.json
+
+      - name: Upload extension.json to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension.json
