@@ -4,7 +4,7 @@ This guide walks you through setting up automated builds and releases for a Symp
 
 ## Prerequisites
 
-- A Rust crate that builds an MCP server binary
+- A Rust crate that builds an Agent Client Protocol (ACP) agent or agent extension
 - A GitHub repository for the extension
 
 ## Step 1: Add Symposium Metadata to Cargo.toml
