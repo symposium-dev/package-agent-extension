@@ -67,22 +67,21 @@ Values in `extra_env` are merged with values from `Cargo.toml`.
 
 ### Initialize release-plz
 
-**Ask the user to run this command:**
+**IMPORTANT: This is an interactive command. Do NOT run it yourself. Instead, ask the human user to run it in their own terminal.**
+
+Setup release-plz by having the human user execute:
 
 ```bash
 release-plz init
 ```
 
-This command:
-- Creates `.github/workflows/release-plz.yml`
-- Sets up necessary GitHub repository secrets
-- Configures the release workflow
+This command requires user interaction (GitHub authentication, selecting options) and cannot be run by an agent. The user must run it themselves.
 
-If they don't have release-plz installed, they can install it with:
+If they don't have release-plz installed, ask them to install it first:
 
 ```bash
 cargo binstall release-plz
-# or cargo install
+# or: cargo install release-plz
 ```
 
 ### Configure Conventional Commits
