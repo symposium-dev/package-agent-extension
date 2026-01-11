@@ -39,7 +39,7 @@ with:
   extra_args: '["--feature", "extra"]'
 ```
 
-If Cargo.toml has `args = ["--mcp"]` and you pass `extra_args: '["--verbose"]'`, the final args are `["--mcp", "--verbose"]`.
+If Cargo.toml has `args = ["--acp"]` and you pass `extra_args: '["--verbose"]'`, the final args are `["--acp", "--verbose"]`.
 
 ## `extra_env`
 

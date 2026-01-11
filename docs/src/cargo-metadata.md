@@ -12,7 +12,7 @@ description = "An agent extension for X"
 
 [package.metadata.symposium]
 binary = "my-ext"              # Binary name (defaults to package name)
-args = ["--mcp", "--verbose"]  # Arguments passed when spawning
+args = ["--acp", "--verbose"]  # Arguments passed when spawning
 env = { API_KEY = "default" }  # Environment variables
 ```
 
@@ -38,7 +38,7 @@ Arguments passed to the binary when spawned by Symposium:
 
 ```toml
 [package.metadata.symposium]
-args = ["--mcp", "--verbose"]
+args = ["--acp", "--verbose"]
 ```
 
 ### `env`

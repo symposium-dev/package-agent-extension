@@ -29,7 +29,7 @@ Add symposium metadata to specify how your extension should be spawned:
 
 ```toml
 [package.metadata.symposium]
-args = ["--mcp"]  # Arguments passed when spawning
+args = ["--acp"]  # Arguments passed when spawning
 ```
 
 See [Cargo Metadata](./cargo-metadata.md) for all options.

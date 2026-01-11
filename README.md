@@ -59,7 +59,7 @@ description = "An agent extension for X"
 
 [package.metadata.symposium]
 binary = "my-ext"              # Optional: defaults to package name
-args = ["--mcp", "--verbose"]  # Optional: arguments passed when spawning
+args = ["--acp", "--verbose"]  # Optional: arguments passed when spawning
 env = { API_KEY = "default" }  # Optional: environment variables
 ```
 

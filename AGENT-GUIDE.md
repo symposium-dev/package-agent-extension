@@ -14,7 +14,7 @@ Add a `[package.metadata.symposium]` section to configure how your extension is 
 ```toml
 [package.metadata.symposium]
 binary = "my-extension"           # Optional: defaults to package name
-args = ["--mcp"]                  # Optional: arguments passed when spawning
+args = ["--acp"]                  # Optional: arguments passed when spawning
 env = { SOME_VAR = "value" }      # Optional: environment variables
 ```
 
